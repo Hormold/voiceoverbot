@@ -1,0 +1,31 @@
+{
+  "name": "voiceoverbot",
+  "version": "1.0.0",
+  "description": "VoiceOverBot",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ai-sdk/google": "^1.2.18",
+    "ai": "^4.3.15",
+    "dotenv": "^16.4.7",
+    "node-telegram-bot-api": "^0.64.0",
+    "pg": "^8.11.3",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "@types/node-telegram-bot-api": "^0.64.1",
+    "@types/pg": "^8.10.9",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.3"
+  }
+}
