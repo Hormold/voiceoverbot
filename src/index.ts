@@ -7,8 +7,8 @@ import { z } from "zod";
 dotenv.config();
 
 const botToken = process.env.BOT_TOKEN;
-const googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY; // Vercel SDK typically uses GOOGLE_API_KEY
-const geminiModelId = process.env.GEMINI_MODEL_ID || "gemini-1.5-pro-latest"; // Default model, user mentioned 'gemini-2.5-pro-preview-05-06'
+const googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+const geminiModelId = process.env.GEMINI_MODEL_ID || "gemini-2.5-pro-preview-05-06";
 
 if (!botToken) {
   console.error("BOT_TOKEN is missing from .env");
@@ -16,7 +16,7 @@ if (!botToken) {
 }
 if (!googleApiKey) {
   console.error(
-    "GOOGLE_API_KEY or GEMINI_API_KEY is missing from .env for Google AI",
+    "GOOGLE_GENERATIVE_AI_API_KEY is missing from .env for Google AI",
   );
   process.exit(1);
 }
@@ -86,14 +86,10 @@ async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
             text: "Transcribe the audio and provide the result using the outputTranscription tool.",
           },
           {
-            // This part is crucial and might need adjustment based on how @ai-sdk/google handles file uploads.
-            // Using 'custom' or a more fitting type if 'file' isn't directly supported,
-            // or encoding data to base64 if that's what the underlying model/API expects.
-            // For now, sticking to your `runTranscribe` example's structure for the file part.
-            type: "file" as any, // This is non-standard for UserContentPart. Potentially needs to be { type: 'text', text: `base64_encoded_audio_string` } or a specific multimodal part type.
+            type: "file",
             mimeType: "audio/ogg",
-            data: audioBuffer, // Direct buffer passing.
-          } as any, // Cast the whole part if `type: "file"` makes the structure incompatible with UserContentPart.
+            data: audioBuffer,
+          },
         ],
       };
 
@@ -122,17 +118,6 @@ async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
           },
         },
       });
-      
-      // Check if the promise was already resolved by the tool's execute method.
-      // If finishReason is 'tool-calls' but the promise isn't resolved, something is wrong.
-      // If it's not 'tool-calls', then the tool wasn't called as expected.
-      if (finishReason !== 'tool-calls' && finishReason !== 'stop') { // stop can happen if the tool resolved and returned a message
-        // This check might be redundant if the timeout is the main guard.
-        // If the promise isn't resolved by now (e.g. tool not called), the timeout will eventually reject.
-        // Consider if an explicit rejection here is needed if tool wasn't called.
-        // For now, relying on the tool to resolve or the timeout to reject.
-      }
-
     } catch (error) {
       log(`Error during transcription: ${(error as Error).message}`);
       clearTimeout(timeoutId);
