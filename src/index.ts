@@ -77,8 +77,13 @@ const transcriptionSystemPrompt = `You are a highly proficient audio transcripti
   "seven thousand, eight hundred, nine" -> "7000, 800, 9"
 
 ## TLDR
-If text is longer than 300 characters, provide a tldr summary of the transcription. Use the same language as the transcription, but summarize it into 20-30 words with general idea of the voice message.
-It should be a single sentence, not a list of points.`;
+If text is longer than 300 characters, provide a tldr summary of the transcription. The summary MUST:
+1. Use the same language as the transcription
+2. Maintain the same first/third person perspective as the original message
+3. Keep the same tone, style and speaking voice
+4. Be 20-30 words summarizing the general idea 
+5. Be a single sentence, not a list of points
+6. NOT describe the message in third person (like "the user talks about...") - instead, preserve the original voice`;
 
 async function transcribeAudio(audioBuffer: Buffer): Promise<{ transcribedText: string, tldr: string | null }> {
   log("Starting audio transcription with Gemini...");
