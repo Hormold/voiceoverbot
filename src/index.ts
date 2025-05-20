@@ -56,28 +56,39 @@ async function downloadVoiceToBuffer(fileId: string): Promise<Buffer> {
   });
 }
 
-const transcriptionSystemPrompt = `\
-You are a highly proficient audio transcription service. Your primary function is to accurately convert spoken audio into written text.
-Key Instructions:
+const transcriptionSystemPrompt = `You are a highly proficient audio transcription service. Your primary function is to accurately convert spoken audio from telegram voice messages into written text with correct punctuation, formatting and language preservation.
+
+## Key Instructions
 1.  **Language Preservation**: Transcribe the audio in the exact language spoken. Do not translate.
 2.  **Accuracy**: Capture all spoken words precisely.
 3.  **Punctuation and Formatting**: Apply standard punctuation (periods, commas, question marks, capitalization, paragraphs for distinct speakers or long pauses if discernible) to ensure the text is clear, well-structured, and easy to read.
 4.  **No Extraneous Content**: Your output must *only* be the transcribed text. Do not include any introductory phrases (e.g., "Here is the transcription:"), summaries, disclaimers, or any other text that is not part of the direct transcription.
-5.  **Tool Usage**: You MUST use the 'outputTranscription' tool to provide the final transcribed text.`;
+5.  **Tool Usage**: You MUST use the 'outputTranscription' tool to provide the final transcribed text.
+6.  **Filler Words**: Remove all filler words like "um", "uh", "ah", "er", "like" and same on another languages. If the text is really short, just return the text as is.
+7.  **Points**: If voice message contains some lists, points, etc. Make proper formatting for them.
+  Example:
+  "do this, do that, do the other thing"
+  should be formatted as:
+  "1. Do this
+  2. Do that
+  3. Do the other thing"
+8.  **Numbers**: If voice message contains numbers, make proper formatting for them.
+  Example:
+  "seven thousand, eight hundred, nine" -> "7000, 800, 9"
 
-async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
+## TLDR
+If text is longer than 300 characters, provide a tldr summary of the transcription. Use the same language as the transcription, but summarize it into 20-30 words with general idea of the voice message.
+It should be a single sentence, not a list of points.`;
+
+async function transcribeAudio(audioBuffer: Buffer): Promise<{ transcribedText: string, tldr: string | null }> {
   log("Starting audio transcription with Gemini...");
 
-  return new Promise<string>(async (resolve, reject) => {
+  return new Promise<{ transcribedText: string, tldr: string | null }>(async (resolve, reject) => {
     const timeoutId = setTimeout(() => {
       reject(new Error("Transcription timed out after 60 seconds"));
     }, 60000);
 
     try {
-      // Constructing the user message. The Vercel AI SDK can be particular about content types.
-      // The structure `{ type: "file", mimeType: "audio/ogg", data: audioBuffer }` is based on your example.
-      // If this does not work, the `google` provider might expect Base64 encoded data for generic files,
-      // or a specific format for audio input not using the `image` type.
       const userMessageContent: CoreMessage = {
         role: "user",
         content: [
@@ -93,7 +104,7 @@ async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
         ],
       };
 
-      const { toolResults, finishReason } = await generateText({
+      await generateText({
         model: google(geminiModelId),
         system: transcriptionSystemPrompt,
         messages: [userMessageContent],
@@ -108,11 +119,12 @@ async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
                 .describe(
                   "The complete and accurately transcribed text from the audio, in the original language, with proper punctuation.",
                 ),
+              tldr: z.string().nullable().describe("A short summary of the transcription, in the original language, with proper punctuation (Optional)."),
             }),
-            execute: async ({ transcribedText }: { transcribedText: string }) => {
+            execute: async ({ transcribedText, tldr }: { transcribedText: string, tldr: string | null }) => {
               log("Transcription tool executed by AI.");
               clearTimeout(timeoutId);
-              resolve(transcribedText);
+              resolve({ transcribedText, tldr });
               return "Transcription successfully processed and extracted.";
             },
           },
@@ -182,11 +194,20 @@ bot.on("voice", async (msg) => {
 
     await bot.sendChatAction(chatId, "typing");
     log("Transcribing audio...");
-    const transcribedText = await retry(() => transcribeAudio(audioBuffer));
-    log("Transcription received: " + transcribedText.substring(0, 100) + (transcribedText.length > 100 ? "..." : ""));
+    const { transcribedText, tldr } = await retry(() => transcribeAudio(audioBuffer));
+    log("Transcription received: " + tldr);
 
-    await bot.sendMessage(chatId, transcribedText, {
+    let template: string;
+ template = `
+<b>TLDR:</b>
+${tldr}
+<b>Original text:</b>
+${transcribedText}
+`;
+
+    await bot.sendMessage(chatId, template, {
       reply_to_message_id: messageId,
+      parse_mode: "HTML",
     });
     log(`Replied to ${username} in chat ${chatId}`);
   } catch (error) {
@@ -197,7 +218,7 @@ bot.on("voice", async (msg) => {
     try {
       await bot.sendMessage(
         chatId,
-        "Извините, не удалось обработать ваше голосовое сообщение. Попробуйте еще раз.",
+        "Sorry, I couldn't process your voice message. Please try again.",
         { reply_to_message_id: messageId },
       );
     } catch (replyError) {
