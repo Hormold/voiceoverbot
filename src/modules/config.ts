@@ -16,4 +16,4 @@ if (!googleApiKey) {
     'GOOGLE_GENERATIVE_AI_API_KEY is missing from .env for Google AI',
   );
   process.exit(1);
-} 
+}

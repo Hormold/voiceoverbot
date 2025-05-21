@@ -1,7 +1,12 @@
-import TelegramBot, { Message } from 'node-telegram-bot-api';
-import { log, retry, downloadVoiceToBuffer, sendContinuousTypingAction } from './utils.js';
+import type { Message } from 'node-telegram-bot-api';
+import type TelegramBot from 'node-telegram-bot-api';
+import {
+  log,
+  retry,
+  downloadVoiceToBuffer,
+  sendContinuousTypingAction,
+} from './utils.js';
 import { transcribeAudio } from './aiService.js';
-// import { adminUserIds } from './config.js'; // Will be added later
 
 // Define a type for Telegram errors if available, or use 'any'
 interface TelegramError extends Error {
@@ -17,10 +22,7 @@ const supportedAudioMimeTypes = [
   'audio/aac', // .aac
 ];
 
-export function initializeTelegramHandlers(
-  bot: TelegramBot,
-  // botId: number // Pass botId if needed for specific checks, or retrieve it inside
-) {
+export function initializeTelegramHandlers(bot: TelegramBot) {
   let localBotId: number; // Stores botId once fetched
 
   bot
@@ -32,18 +34,26 @@ export function initializeTelegramHandlers(
           `Telegram Handlers Initialized for Bot: ${me.username} (ID: ${localBotId})`,
         );
       } else {
-        log('Failed to get bot info for handlers: User object or ID is undefined. Some handlers might not work as expected.');
+        log(
+          'Failed to get bot info for handlers: User object or ID is undefined. Some handlers might not work as expected.',
+        );
         // process.exit(1); // Decide if this is critical enough to exit
       }
     })
     .catch((err) => {
-      log(`Failed to get bot info for handlers: ${(err as Error).message}. Some handlers might not work as expected.`);
+      log(
+        `Failed to get bot info for handlers: ${(err as Error).message}. Some handlers might not work as expected.`,
+      );
       // process.exit(1); // Decide if this is critical enough to exit
     });
 
   bot.on('chat_member', async (ctx) => {
     // Ensure localBotId is set before using it
-    if (localBotId && ctx.new_chat_member && ctx.new_chat_member.user.id === localBotId) {
+    if (
+      localBotId &&
+      ctx.new_chat_member &&
+      ctx.new_chat_member.user.id === localBotId
+    ) {
       log(
         `Bot added to chat: ${ctx.chat.title || 'Untitled Chat'} (ID: ${
           ctx.chat.id
@@ -73,7 +83,8 @@ export function initializeTelegramHandlers(
     const voiceFileId = msg.voice.file_id;
     const messageId = msg.message_id;
     const userId = msg.from?.id;
-    const username = msg.from?.username || msg.from?.first_name || 'UnknownUser';
+    const username =
+      msg.from?.username || msg.from?.first_name || 'UnknownUser';
 
     log(
       `Received voice message from ${username} (ID: ${userId}) in chat ${chatId}`,
@@ -84,8 +95,12 @@ export function initializeTelegramHandlers(
     try {
       typingAction.start();
       log('Downloading voice file...');
-      const audioBuffer = await retry(() => downloadVoiceToBuffer(bot, voiceFileId));
-      log(`Voice file downloaded (${(audioBuffer.length / 1024).toFixed(2)} KB)`);
+      const audioBuffer = await retry(() =>
+        downloadVoiceToBuffer(bot, voiceFileId),
+      );
+      log(
+        `Voice file downloaded (${(audioBuffer.length / 1024).toFixed(2)} KB)`,
+      );
 
       log('Transcribing audio...');
       const { transcribedText, tldr } = await retry(() =>
@@ -132,21 +147,33 @@ export function initializeTelegramHandlers(
       const chatId = msg.chat.id;
       const document = msg.document;
 
-      if (document.mime_type && supportedAudioMimeTypes.includes(document.mime_type)) {
-        log(`Received supported audio document: ${document.file_name || 'Unknown Filename'} (MIME: ${document.mime_type}) from chat ${chatId}`);
+      if (
+        document.mime_type &&
+        supportedAudioMimeTypes.includes(document.mime_type)
+      ) {
+        log(
+          `Received supported audio document: ${document.file_name || 'Unknown Filename'} (MIME: ${document.mime_type}) from chat ${chatId}`,
+        );
         const typingIndicator = sendContinuousTypingAction(bot, chatId);
         typingIndicator.start();
 
         try {
           const fileId = document.file_id;
-          const audioBuffer = await retry(() => downloadVoiceToBuffer(bot, fileId));
-          log(`Audio document ${document.file_name || fileId} downloaded, size: ${audioBuffer.length} bytes. Transcribing...`);
+          const audioBuffer = await retry(() =>
+            downloadVoiceToBuffer(bot, fileId),
+          );
+          log(
+            `Audio document ${document.file_name || fileId} downloaded, size: ${audioBuffer.length} bytes. Transcribing...`,
+          );
 
           // For document messages, msg.from might be undefined if sent by a channel.
           // We'll use chat.id for user context if msg.from is not available.
           // const userIdForLog = msg.from ? msg.from.id : `chat_${chatId}`; // aiService doesn't use this yet
 
-          const { transcribedText, tldr } = await transcribeAudio(audioBuffer, document.mime_type);
+          const { transcribedText, tldr } = await transcribeAudio(
+            audioBuffer,
+            document.mime_type,
+          );
 
           let replyText = `<b>Transcription (Document: ${document.file_name || 'audio file'}):</b>\n${transcribedText}`;
           if (tldr) {
@@ -157,9 +184,13 @@ export function initializeTelegramHandlers(
             parse_mode: 'HTML',
             reply_to_message_id: msg.message_id,
           });
-          log(`Transcription for document ${document.file_name || fileId} sent to chat ${chatId}.`);
+          log(
+            `Transcription for document ${document.file_name || fileId} sent to chat ${chatId}.`,
+          );
         } catch (error: any) {
-          log(`Error processing audio document ${document.file_name || document.file_id} from chat ${chatId}: ${error.message}`);
+          log(
+            `Error processing audio document ${document.file_name || document.file_id} from chat ${chatId}: ${error.message}`,
+          );
           await bot.sendMessage(
             chatId,
             "Sorry, I couldn't process this audio document. Please try another file or check if it's a valid audio format.",
@@ -170,17 +201,19 @@ export function initializeTelegramHandlers(
         }
       } else if (document.mime_type) {
         // It's a document, but not a supported audio type
-        log(`Received unsupported document type: ${document.mime_type} from chat ${chatId}. File: ${document.file_name || 'Unknown Filename'}`);
+        log(
+          `Received unsupported document type: ${document.mime_type} from chat ${chatId}. File: ${document.file_name || 'Unknown Filename'}`,
+        );
         // Optionally, inform the user about unsupported file types if it's not an audio type we might expect
         // For now, we'll only explicitly reject if it *looks* like audio but isn't on our list,
         // or if they send something completely random as a document.
         // To avoid spamming, let's only reply if it's explicitly an 'audio/*' mime type that's not supported.
         if (document.mime_type.startsWith('audio/')) {
-            await bot.sendMessage(
-                chatId,
-                `Sorry, the audio format ${document.mime_type} is not supported. Please try one of: MP3, M4A, OGG, WAV, AAC.`,
-                { reply_to_message_id: msg.message_id },
-            );
+          await bot.sendMessage(
+            chatId,
+            `Sorry, the audio format ${document.mime_type} is not supported. Please try one of: MP3, M4A, OGG, WAV, AAC.`,
+            { reply_to_message_id: msg.message_id },
+          );
         }
       }
       // If it's a document but not audio, we simply ignore it silently
@@ -203,4 +236,4 @@ export function initializeTelegramHandlers(
   });
 
   log('Telegram event handlers registered.');
-} 
+}

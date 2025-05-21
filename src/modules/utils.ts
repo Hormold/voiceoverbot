@@ -1,4 +1,4 @@
-import TelegramBot from 'node-telegram-bot-api';
+import type TelegramBot from 'node-telegram-bot-api';
 
 // It's crucial to pass the bot instance to functions that need it,
 // rather than relying on a global instance, for better testability and modularity.
@@ -25,7 +25,10 @@ export async function retry<T>(
   throw lastError;
 }
 
-export async function downloadVoiceToBuffer(bot: TelegramBot, fileId: string): Promise<Buffer> {
+export async function downloadVoiceToBuffer(
+  bot: TelegramBot,
+  fileId: string,
+): Promise<Buffer> {
   const fileStream = bot.getFileStream(fileId);
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
@@ -35,7 +38,10 @@ export async function downloadVoiceToBuffer(bot: TelegramBot, fileId: string): P
   });
 }
 
-export function sendContinuousTypingAction(bot: TelegramBot, chatId: number | string) {
+export function sendContinuousTypingAction(
+  bot: TelegramBot,
+  chatId: number | string,
+) {
   let intervalId: NodeJS.Timeout;
   return {
     start: () => {
@@ -52,4 +58,4 @@ export function sendContinuousTypingAction(bot: TelegramBot, chatId: number | st
       }
     },
   };
-} 
+}

@@ -1,3 +1,4 @@
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import { google } from '@ai-sdk/google';
 import { generateText, type CoreMessage } from 'ai';
 import { z } from 'zod';
@@ -41,62 +42,79 @@ export async function transcribeAudio(
 ): Promise<{ transcribedText: string; tldr: string | null }> {
   log(`Starting audio transcription with Gemini for mimeType: ${mimeType}...`);
 
-  return new Promise<{ transcribedText: string; tldr: string | null }>(async (resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error('Transcription timed out after 60 seconds')); // This 60000 should be configurable
-    }, 60000);
+  return new Promise<{ transcribedText: string; tldr: string | null }>(
+    async (resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Transcription timed out after 60 seconds')); // This 60000 should be configurable
+      }, 60000);
 
-    try {
-      const userMessageContent: CoreMessage = {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'Transcribe the audio and provide the result using the outputTranscription tool.',
-          },
-          {
-            type: 'file',
-            mimeType: mimeType, // Use the passed mimeType
-            data: audioBuffer,
-          },
-        ],
-      };
+      try {
+        const userMessageContent: CoreMessage = {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Transcribe the audio and provide the result using the outputTranscription tool.',
+            },
+            {
+              type: 'file',
+              mimeType: mimeType, // Use the passed mimeType
+              data: audioBuffer,
+            },
+          ],
+        };
 
-      await generateText({
-        model: google(geminiModelId),
-        system: transcriptionSystemPrompt,
-        messages: [userMessageContent],
-        toolChoice: { type: 'tool', toolName: 'outputTranscription' },
-        tools: {
-          outputTranscription: {
-            description:
-              "Outputs the final transcribed text from the audio, ensuring it's well-formatted and in the original language.",
-            parameters: z.object({
-              transcribedText: z
-                .string()
-                .describe(
-                  'The complete and accurately transcribed text from the audio, in the original language, with proper punctuation.',
-                ),
-              tldr: z
-                .string()
-                .nullable()
-                .describe(
-                  'A short summary of the transcription, in the original language, with proper punctuation (Optional).',
-                ),
-            }),
-            execute: async ({ transcribedText, tldr }: { transcribedText: string; tldr: string | null }) => {
-              log('Transcription tool executed by AI.');
-              clearTimeout(timeoutId);
-              resolve({ transcribedText, tldr });
-              return 'Transcription successfully processed and extracted.';
+        await generateText({
+          model: google(geminiModelId),
+          providerOptions: {
+            google: {
+              thinkingConfig: {
+                thinkingBudget: 1024,
+                includeThoughts: false,
+              },
+              responseModalities: ['TEXT'],
+            } satisfies GoogleGenerativeAIProviderOptions,
+          },
+          system: transcriptionSystemPrompt,
+          messages: [userMessageContent],
+          toolChoice: { type: 'tool', toolName: 'outputTranscription' },
+          tools: {
+            outputTranscription: {
+              description:
+                "Outputs the final transcribed text from the audio, ensuring it's well-formatted and in the original language.",
+              parameters: z.object({
+                transcribedText: z
+                  .string()
+                  .describe(
+                    'The complete and accurately transcribed text from the audio, in the original language, with proper punctuation.',
+                  ),
+                tldr: z
+                  .string()
+                  .nullable()
+                  .describe(
+                    'A short summary of the transcription, in the original language, with proper punctuation (Optional).',
+                  ),
+              }),
+              execute: async ({
+                transcribedText,
+                tldr,
+              }: {
+                transcribedText: string;
+                tldr: string | null;
+              }) => {
+                log('Transcription tool executed by AI.');
+                clearTimeout(timeoutId);
+                resolve({ transcribedText, tldr });
+                return 'Transcription successfully processed and extracted.';
+              },
             },
           },
-        },
-      });
-    } catch (error) {
-      log(`Error during transcription: ${(error as Error).message}`);
-      clearTimeout(timeoutId);
-      reject(error);
-    }
-  });
-} 
+        });
+      } catch (error) {
+        log(`Error during transcription: ${(error as Error).message}`);
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    },
+  );
+}
