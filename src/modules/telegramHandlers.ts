@@ -4,6 +4,7 @@ import {
   log,
   retry,
   downloadVoiceToBuffer,
+  extractAudioFromVideoNote,
   sendContinuousTypingAction,
 } from './utils.js';
 import { transcribeAudio } from './aiService.js';
@@ -62,7 +63,7 @@ export function initializeTelegramHandlers(bot: TelegramBot) {
       try {
         await bot.sendMessage(
           ctx.chat.id,
-          'Hello! I am a bot that transcribes voice messages. Please give me admin rights to track all voice messages in the chat.',
+          'Hello! I am a bot that transcribes voice messages and video notes (video circles). Please give me admin rights to track all voice messages in the chat.',
         );
       } catch (error) {
         log(
@@ -134,6 +135,95 @@ export function initializeTelegramHandlers(bot: TelegramBot) {
       } catch (replyError) {
         log(
           `Failed to send error reply to ${username}: ${
+            (replyError as Error).message
+          }`,
+        );
+      }
+    }
+  });
+
+  // Handler for video notes (video circles)
+  bot.on('video_note', async (msg: Message) => {
+    const chatId = msg.chat.id;
+    if (!msg.video_note || !msg.video_note.file_id) {
+      log(
+        `Received message in chat ${chatId} without video_note data or file_id.`,
+      );
+      return;
+    }
+
+    const videoNoteFileId = msg.video_note.file_id;
+    const messageId = msg.message_id;
+    const userId = msg.from?.id;
+    const username =
+      msg.from?.username || msg.from?.first_name || 'UnknownUser';
+    const duration = msg.video_note.duration;
+    const fileSize = msg.video_note.file_size;
+
+    log(
+      `Received video note from ${username} (ID: ${userId}) in chat ${chatId}, duration: ${duration}s, size: ${fileSize ? (fileSize / 1024).toFixed(2) + ' KB' : 'unknown'}`,
+    );
+
+    const typingAction = sendContinuousTypingAction(bot, chatId);
+
+    try {
+      typingAction.start();
+
+      // Extract audio from video note
+      const audioBuffer = await retry(() =>
+        extractAudioFromVideoNote(bot, videoNoteFileId),
+      );
+
+      log('Transcribing audio from video note...');
+      const { transcribedText, tldr } = await retry(
+        () => transcribeAudio(audioBuffer, 'audio/mp3'), // We convert to MP3 in extractAudioFromVideoNote
+      );
+
+      let template: string =
+        tldr?.trim() && tldr.length > 0
+          ? `<b>TLDR (Video Note):</b>\n${tldr}\n<b>Original text:</b>\n${transcribedText}`
+          : `${transcribedText}`;
+
+      typingAction.stop();
+      await bot.sendMessage(chatId, template, {
+        reply_to_message_id: messageId,
+        parse_mode: 'HTML',
+      });
+      log(
+        `Replied with video note transcription to ${username} in chat ${chatId}`,
+      );
+    } catch (error) {
+      typingAction.stop();
+      const errorMessage =
+        (error as Error).message ||
+        'Unknown error during video note processing';
+      log(
+        `Error processing video note from ${username} in chat ${chatId}: ${errorMessage}`,
+      );
+
+      try {
+        let replyMessage =
+          "Sorry, I couldn't process your video note. Please try again or send a voice message instead.";
+
+        // Provide more specific error messages
+        if (
+          errorMessage.includes('does not contain audio') ||
+          errorMessage.includes('too small') ||
+          errorMessage.includes('silent')
+        ) {
+          replyMessage =
+            "This video note appears to be silent or doesn't contain audio. Please record a video note with speech or send a voice message instead.";
+        } else if (errorMessage.includes('FFmpeg')) {
+          replyMessage =
+            'There was an issue processing the video format. Please try sending a voice message instead.';
+        }
+
+        await bot.sendMessage(chatId, replyMessage, {
+          reply_to_message_id: messageId,
+        });
+      } catch (replyError) {
+        log(
+          `Failed to send error reply for video note to ${username}: ${
             (replyError as Error).message
           }`,
         );

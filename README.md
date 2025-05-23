@@ -1,15 +1,16 @@
 # VoiceOverBot
 
-VoiceOverBot is a Telegram bot that transcribes voice messages sent to it using Google's Generative AI (Gemini). It's built with Node.js, TypeScript, and the `node-telegram-bot-api` library.
+VoiceOverBot is a Telegram bot that transcribes voice messages and video notes (video circles) sent to it using Google's Generative AI (Gemini). It's built with Node.js, TypeScript, and the `node-telegram-bot-api` library.
 
 **Author:** Gemini (via Google)
 
 ## Features
 
-*   Receives voice messages in Telegram chats.
-*   Downloads the voice message.
+*   Receives voice messages and video notes (video circles) in Telegram chats.
+*   Downloads voice messages directly or extracts audio from video notes using FFmpeg.
 *   Transcribes the audio using Google's Gemini Pro model (specifically `gemini-2.5-pro-preview-05-06` by default) via the Vercel AI SDK.
-*   Replies to the original voice message with the transcribed text.
+*   Replies to the original voice message or video note with the transcribed text.
+*   Supports various audio file formats sent as documents (MP3, M4A, OGG, WAV, AAC).
 *   Handles chat member updates: greets when added to a new chat and informs about the need for admin rights to read messages.
 *   Includes basic error handling and retry mechanisms.
 
@@ -33,6 +34,7 @@ VoiceOverBot is a Telegram bot that transcribes voice messages sent to it using 
 *   pnpm (or npm/yarn)
 *   A Telegram Bot Token
 *   A Google Generative AI API Key
+*   FFmpeg (for video note audio extraction) - Install from [https://ffmpeg.org/](https://ffmpeg.org/)
 
 ## Setup
 
@@ -82,12 +84,17 @@ VoiceOverBot is a Telegram bot that transcribes voice messages sent to it using 
 
 1.  The bot connects to Telegram using the `node-telegram-bot-api`.
 2.  When a voice message is received, the bot downloads the audio file into a buffer.
-3.  The audio data is structured as a `CoreMessage` part with `type: "file"`, `mimeType: "audio/ogg"`, and the audio `Buffer`. This, along with a text prompt, is sent to the specified Google Gemini model using the `generateText` function from the Vercel AI SDK (`ai` package) with the `@ai-sdk/google` provider.
-4.  A system prompt instructs the AI on how to behave: transcribe accurately, preserve the original language, apply proper formatting, avoid extraneous content, and strictly use the `outputTranscription` tool for its response.
-5.  The AI is forced (via `toolChoice`) to use the `outputTranscription` tool. This tool is defined with a Zod schema ensuring the AI provides the transcribed text in the expected string format.
-6.  When the AI calls the tool, the `execute` function within the tool definition resolves with the transcribed text.
-7.  The bot then sends this text back to the Telegram chat as a reply to the original voice message.
-8.  The bot also handles being added to new chats by sending a welcome message and mentioning the need for admin permissions to function correctly.
+3.  When a video note (video circle) is received, the bot:
+    *   Downloads the MP4 video file
+    *   Uses FFmpeg via `fluent-ffmpeg` to extract the audio track from the video
+    *   Converts the audio to MP3 format for compatibility
+4.  For audio documents (MP3, M4A, OGG, WAV, AAC), the bot downloads the file directly.
+5.  The audio data is structured as a `CoreMessage` part with `type: "file"`, appropriate `mimeType`, and the audio `Buffer`. This, along with a text prompt, is sent to the specified Google Gemini model using the `generateText` function from the Vercel AI SDK (`ai` package) with the `@ai-sdk/google` provider.
+6.  A system prompt instructs the AI on how to behave: transcribe accurately, preserve the original language, apply proper formatting, avoid extraneous content, and strictly use the `outputTranscription` tool for its response.
+7.  The AI is forced (via `toolChoice`) to use the `outputTranscription` tool. This tool is defined with a Zod schema ensuring the AI provides the transcribed text in the expected string format.
+8.  When the AI calls the tool, the `execute` function within the tool definition resolves with the transcribed text.
+9.  The bot then sends this text back to the Telegram chat as a reply to the original voice message, video note, or audio document.
+10. The bot also handles being added to new chats by sending a welcome message and mentioning the need for admin permissions to function correctly.
 
 ## Dependencies
 
@@ -96,6 +103,7 @@ VoiceOverBot is a Telegram bot that transcribes voice messages sent to it using 
 *   `@ai-sdk/google`: Google provider for the Vercel AI SDK.
 *   `dotenv`: For loading environment variables from a `.env` file.
 *   `zod`: For schema validation (used for defining the AI tool's parameters).
+*   `fluent-ffmpeg`: For extracting audio from video notes (video circles).
 
 ## Development Dependencies
 
